@@ -265,6 +265,8 @@ static int do_spi_flash_read_write(int argc, char * const argv[])
 	int ret = 1;
 	int dev = 0;
 	loff_t offset, len, maxsize;
+	const ulong start_time = get_timer(0);
+	ulong delta;
 
 	if (argc < 3)
 		return -1;
@@ -305,9 +307,12 @@ static int do_spi_flash_read_write(int argc, char * const argv[])
 		printf("SF: %zu bytes @ %#x %s: ", (size_t)len, (u32)offset,
 		       read ? "Read" : "Written");
 		if (ret)
-			printf("ERROR %d\n", ret);
+			printf("ERROR %d", ret);
 		else
-			printf("OK\n");
+			printf("OK");
+		delta = get_timer(start_time);
+		printf(" in %ld.%lds, speed %ld B/s\n",
+		       delta / 1000, delta % 1000, bytes_per_second(len, start_time));
 	}
 
 	unmap_physmem(buf, len);
@@ -321,6 +326,8 @@ static int do_spi_flash_erase(int argc, char * const argv[])
 	int dev = 0;
 	loff_t offset, len, maxsize;
 	ulong size;
+	const ulong start_time = get_timer(0);
+	ulong delta;
 
 	if (argc < 3)
 		return -1;
@@ -341,8 +348,12 @@ static int do_spi_flash_erase(int argc, char * const argv[])
 	}
 
 	ret = spi_flash_erase(flash, offset, size);
-	printf("SF: %zu bytes @ %#x Erased: %s\n", (size_t)size, (u32)offset,
+	printf("SF: %zu bytes @ %#x Erased: %s", (size_t)size, (u32)offset,
 	       ret ? "ERROR" : "OK");
+
+	delta = get_timer(start_time);
+	printf(" in %ld.%lds, speed %ld B/s\n",
+	       delta / 1000, delta % 1000, bytes_per_second(size, start_time));
 
 	return ret == 0 ? 0 : 1;
 }
