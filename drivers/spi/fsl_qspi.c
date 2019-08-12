@@ -19,7 +19,7 @@
  * Author: Freescale Semiconductor, Inc.
  *
  */
-
+#define AK 0
 #include <common.h>
 #include <asm/io.h>
 #include <dm.h>
@@ -48,7 +48,9 @@
 
 #include <spi.h>
 #include <spi-mem.h>
-
+#define PR(fmt, ...) \
+	 fprintf(stderr, "DEBUG: %s:%d:%s(): \n" fmt, \
+    		__FILE__, __LINE__, __func__, ##__VA_ARGS__)
 DECLARE_GLOBAL_DATA_PTR;
 
 /*
@@ -252,8 +254,8 @@ static const struct fsl_qspi_devtype_data devtype_data = {
 	.rxfifo = SZ_128,
 	.txfifo = SZ_128,
 	.ahb_buf_size = SZ_1K,
-	.quirks = 0,
-	.little_endian = false,
+	.quirks = QUADSPI_QUIRK_TKT253890 | QUADSPI_QUIRK_BASE_INTERNAL,
+	.little_endian = true,
 };
 #elif defined(CONFIG_ARCH_LS2080A)
 static const struct fsl_qspi_devtype_data devtype_data = {
@@ -692,10 +694,12 @@ static int fsl_qspi_exec_op(struct spi_slave *slave,
 	 * by accessing the mapped memory. In all other cases we use
 	 * IP commands to access the flash.
 	 */
+#if AK
 	if (op->data.nbytes > (q->devtype_data->rxfifo - 4) &&
 	    op->data.dir == SPI_MEM_DATA_IN) {
 		fsl_qspi_read_ahb(q, op);
 	} else {
+#endif	
 		qspi_writel(q, QUADSPI_RBCT_WMRK_MASK |
 			    QUADSPI_RBCT_RXBRD_USEIPS, base + QUADSPI_RBCT);
 
@@ -703,8 +707,9 @@ static int fsl_qspi_exec_op(struct spi_slave *slave,
 			fsl_qspi_fill_txfifo(q, op);
 
 		err = fsl_qspi_do_op(q, op);
+#if AK
 	}
-
+#endif
 	/* Invalidate the data in the AHB buffer. */
 	fsl_qspi_invalidate(q);
 
@@ -863,6 +868,7 @@ static int fsl_qspi_probe(struct udevice *bus)
 	int node = dev_of_offset(bus);
 	struct fdt_resource res;
 	int ret;
+	PR();
 
 #ifndef __UBOOT__
 	ctlr = spi_alloc_master(&pdev->dev, sizeof(*q));
@@ -874,6 +880,7 @@ static int fsl_qspi_probe(struct udevice *bus)
 
 	q = spi_controller_get_devdata(ctlr);
 	q->dev = dev;
+	PR("ctlr->mode_bits= %#x", ctlr->mode_bits);
 #endif
 
 	q->devtype_data = &devtype_data;
@@ -946,8 +953,8 @@ static int fsl_qspi_probe(struct udevice *bus)
 					66000000);
 
 	mutex_init(&q->lock);
-
 #ifndef __UBOOT__
+
 	ctlr->bus_num = -1;
 	ctlr->num_chipselect = 4;
 	ctlr->mem_ops = &fsl_qspi_mem_ops;
