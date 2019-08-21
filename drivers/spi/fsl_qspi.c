@@ -152,7 +152,7 @@ static inline int is_controller_busy(const struct fsl_qspi_priv *priv)
 	u32 val;
 	const u32 mask = QSPI_SR_BUSY_MASK | QSPI_SR_AHB_ACC_MASK |
 			 QSPI_SR_IP_ACC_MASK;
-	unsigned long timeout = timer_get_us() + 1000;
+	unsigned int retry = 5;
 
 	do {
 		val = qspi_read32(priv->flags, &priv->regs->sr);
@@ -160,9 +160,10 @@ static inline int is_controller_busy(const struct fsl_qspi_priv *priv)
 		if ((~val & mask) == mask)
 			return 0;
 
-		if (timer_get_us() > timeout )
-			return -ETIMEDOUT;
-	} while (1);
+		udelay(1);
+	} while (--retry);
+
+	return -ETIMEDOUT;
 }
 
 /* QSPI support swapping the flash read/write data
