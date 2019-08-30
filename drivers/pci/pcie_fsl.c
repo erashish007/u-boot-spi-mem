@@ -445,7 +445,7 @@ static int fsl_pcie_init_port(struct fsl_pcie *pcie)
 	    !fsl_pcie_link_up(pcie)) {
 		serdes_corenet_t *srds_regs;
 
-		srds_regs = (void *)CONFIG_SYS_FSL_CORENET_SERDES_ADDR;
+		srds_regs = (void *)P4080_SERDES_ADDR;
 		val_32 = in_be32(&srds_regs->srdspccr0);
 
 		if ((val_32 >> 28) == 3) {
@@ -503,12 +503,21 @@ static int fsl_pcie_fixup_classcode(struct fsl_pcie *pcie)
 	ccsr_fsl_pci_t *regs = pcie->regs;
 	u32 val;
 
-	setbits_be32(&regs->dbi_ro_wr_en, 0x01);
-	fsl_pcie_hose_read_config_dword(pcie, PCI_CLASS_REVISION, &val);
+	if (pcie->block_rev >= PEX_IP_BLK_REV_3_0) {
+		setbits_be32(&regs->dbi_ro_wr_en, 0x01);
+		fsl_pcie_hose_read_config_dword(pcie, PCI_CLASS_REVISION, &val);
+		val &= 0xff;
+		val |= PCI_CLASS_BRIDGE_PCI << 16;
+		fsl_pcie_hose_write_config_dword(pcie, PCI_CLASS_REVISION, val);
+		clrbits_be32(&regs->dbi_ro_wr_en, 0x01);
+
+		return 0;
+	}
+
+	fsl_pcie_hose_read_config_dword(pcie, CSR_CLASSCODE, &val);
 	val &= 0xff;
 	val |= PCI_CLASS_BRIDGE_PCI << 16;
-	fsl_pcie_hose_write_config_dword(pcie, PCI_CLASS_REVISION, val);
-	clrbits_be32(&regs->dbi_ro_wr_en, 0x01);
+	fsl_pcie_hose_write_config_dword(pcie, CSR_CLASSCODE, val);
 
 	return 0;
 }
@@ -571,6 +580,7 @@ static int fsl_pcie_probe(struct udevice *dev)
 static int fsl_pcie_ofdata_to_platdata(struct udevice *dev)
 {
 	struct fsl_pcie *pcie = dev_get_priv(dev);
+	struct fsl_pcie_data *info;
 	int ret;
 
 	pcie->regs = dev_remap_addr(dev);
@@ -585,7 +595,10 @@ static int fsl_pcie_ofdata_to_platdata(struct udevice *dev)
 		return ret;
 	}
 
-	pcie->idx = (dev_read_addr(dev) - 0xffe240000) / 0x10000;
+	info = (struct fsl_pcie_data *)dev_get_driver_data(dev);
+	pcie->info = info;
+	pcie->idx = abs((u32)(dev_read_addr(dev) & info->block_offset_mask) -
+		    info->block_offset) / info->stride;
 
 	return 0;
 }
@@ -595,8 +608,35 @@ static const struct dm_pci_ops fsl_pcie_ops = {
 	.write_config	= fsl_pcie_write_config,
 };
 
+static struct fsl_pcie_data p1_p2_data = {
+	.block_offset = 0xa000,
+	.block_offset_mask = 0xffff,
+	.stride = 0x1000,
+};
+
+static struct fsl_pcie_data p2041_data = {
+	.block_offset = 0x200000,
+	.block_offset_mask = 0x3fffff,
+	.stride = 0x1000,
+};
+
+static struct fsl_pcie_data t2080_data = {
+	.block_offset = 0x240000,
+	.block_offset_mask = 0x3fffff,
+	.stride = 0x10000,
+};
+
 static const struct udevice_id fsl_pcie_ids[] = {
-	{ .compatible = "fsl,pcie-t2080" },
+	{ .compatible = "fsl,pcie-mpc8548", .data = (ulong)&p1_p2_data },
+	{ .compatible = "fsl,pcie-p1_p2", .data = (ulong)&p1_p2_data },
+	{ .compatible = "fsl,pcie-p2041", .data = (ulong)&p2041_data },
+	{ .compatible = "fsl,pcie-p3041", .data = (ulong)&p2041_data },
+	{ .compatible = "fsl,pcie-p4080", .data = (ulong)&p2041_data },
+	{ .compatible = "fsl,pcie-p5040", .data = (ulong)&p2041_data },
+	{ .compatible = "fsl,pcie-t102x", .data = (ulong)&t2080_data },
+	{ .compatible = "fsl,pcie-t104x", .data = (ulong)&t2080_data },
+	{ .compatible = "fsl,pcie-t2080", .data = (ulong)&t2080_data },
+	{ .compatible = "fsl,pcie-t4240", .data = (ulong)&t2080_data },
 	{ }
 };
 
