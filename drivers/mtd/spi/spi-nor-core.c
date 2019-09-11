@@ -885,8 +885,11 @@ static const struct flash_info *spi_nor_read_id(struct spi_nor *nor)
 	info = spi_nor_ids;
 	for (; info->name; info++) {
 		if (info->id_len) {
-			if (!memcmp(info->id, id, info->id_len))
+			if (!memcmp(info->id, id, info->id_len)) {
+				printf("JEDEC id bytes: %02x, %02x, %02x\n", id[0], id[1], id[2]);
+				printf("JEDEC info->id bytes: %02x, %02x, %02x\n", info->id[0], info->id[1], info->id[2]);
 				return info;
+			}
 		}
 	}
 

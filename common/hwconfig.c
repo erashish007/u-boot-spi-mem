@@ -78,7 +78,7 @@ static const char *__hwconfig(const char *opt, size_t *arglen,
 	if (!env_hwconfig) {
 		if (!(gd->flags & GD_FLG_ENV_READY)) {
 			printf("WARNING: Calling __hwconfig without a buffer "
-					"and before environment is ready\n");
+					"and before environment is ready %#lx \n", gd->flags);
 			return NULL;
 		}
 		env_hwconfig = env_get("hwconfig");
