@@ -19,7 +19,7 @@
  * Author: Freescale Semiconductor, Inc.
  *
  */
-#define AK 0
+#define AK 1
 #include <common.h>
 #include <asm/io.h>
 #include <dm.h>
@@ -49,8 +49,9 @@
 #include <spi.h>
 #include <spi-mem.h>
 #define PR(fmt, ...) \
-	 fprintf(stderr, "DEBUG: %s:%d:%s(): \n" fmt, \
-    		__FILE__, __LINE__, __func__, ##__VA_ARGS__)
+	 printf("DEBUG: %s:%d:%s(): " fmt" \n", \
+		__FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#define PR(fmt, ...) 
 DECLARE_GLOBAL_DATA_PTR;
 
 /*
@@ -237,7 +238,7 @@ static const struct fsl_qspi_devtype_data devtype_data = {
 	.rxfifo = SZ_128,
 	.txfifo = SZ_64,
 	.ahb_buf_size = SZ_1K,
-	.quirks = 0,
+	.quirks = QUADSPI_QUIRK_SWAP_ENDIAN,
 	.little_endian = false,
 };
 #elif defined(CONFIG_ARCH_LS1012A) || defined(CONFIG_ARCH_LS1043A) || \
@@ -254,7 +255,7 @@ static const struct fsl_qspi_devtype_data devtype_data = {
 	.rxfifo = SZ_128,
 	.txfifo = SZ_128,
 	.ahb_buf_size = SZ_1K,
-	.quirks = QUADSPI_QUIRK_TKT253890 | QUADSPI_QUIRK_BASE_INTERNAL,
+	.quirks = QUADSPI_QUIRK_TKT253890,
 	.little_endian = true,
 };
 #elif defined(CONFIG_ARCH_LS2080A)
@@ -468,10 +469,16 @@ static void fsl_qspi_prepare_lut(struct fsl_qspi *q,
 	qspi_writel(q, QUADSPI_LUTKEY_VALUE, q->iobase + QUADSPI_LUTKEY);
 	qspi_writel(q, QUADSPI_LCKER_UNLOCK, q->iobase + QUADSPI_LCKCR);
 
-	/* fill LUT */
-	for (i = 0; i < ARRAY_SIZE(lutval); i++)
-		qspi_writel(q, lutval[i], base + QUADSPI_LUT_REG(i));
+	PR("CMD[%x]", op->cmd.opcode);
+	PR("addr val[%llx]", op->addr.val);
+	PR("data[%x]", op->data.nbytes);
+	PR("lutval[0:%x \t 1:%x \t 2:%x \t 3:%x] \t \n",
+                 lutval[0], lutval[1], lutval[2], lutval[3]);
 
+	/* fill LUT */
+	for (i = 0; i < ARRAY_SIZE(lutval); i++) {
+		qspi_writel(q, lutval[i], base + QUADSPI_LUT_REG(i));
+	}
 	/* lock LUT */
 	qspi_writel(q, QUADSPI_LUTKEY_VALUE, q->iobase + QUADSPI_LUTKEY);
 	qspi_writel(q, QUADSPI_LCKER_LOCK, q->iobase + QUADSPI_LCKCR);
@@ -605,6 +612,7 @@ static void fsl_qspi_read_rxfifo(struct fsl_qspi *q,
 	int i;
 	u8 *buf = op->data.buf.in;
 	u32 val;
+	PR("bytes= %d", op->data.nbytes);
 
 	for (i = 0; i < ALIGN_DOWN(op->data.nbytes, 4); i += 4) {
 		val = qspi_readl(q, base + QUADSPI_RBDR(i / 4));
@@ -648,7 +656,7 @@ static int fsl_qspi_do_op(struct fsl_qspi *q, const struct spi_mem_op *op)
 		    base + QUADSPI_IPCR);
 
 	/* wait for the controller being ready */
-	fsl_qspi_readl_poll_tout(q, base + QUADSPI_SR, (QUADSPI_SR_IP_ACC_MASK |
+	err = fsl_qspi_readl_poll_tout(q, base + QUADSPI_SR, (QUADSPI_SR_IP_ACC_MASK |
 				 QUADSPI_SR_AHB_ACC_MASK), 10, 1000);
 
 	if (!err && op->data.nbytes && op->data.dir == SPI_MEM_DATA_IN)
@@ -699,7 +707,7 @@ static int fsl_qspi_exec_op(struct spi_slave *slave,
 	    op->data.dir == SPI_MEM_DATA_IN) {
 		fsl_qspi_read_ahb(q, op);
 	} else {
-#endif	
+#endif
 		qspi_writel(q, QUADSPI_RBCT_WMRK_MASK |
 			    QUADSPI_RBCT_RXBRD_USEIPS, base + QUADSPI_RBCT);
 
@@ -722,16 +730,28 @@ static int fsl_qspi_adjust_op_size(struct spi_slave *slave,
 				   struct spi_mem_op *op)
 {
 	struct fsl_qspi *q = dev_get_priv(slave->dev->parent);
-
+	PR("bytes=%d", op->data.nbytes);
+	PR("q->devtype_data->ahb_buf_size=%d", q->devtype_data->ahb_buf_size);
+	PR("q->devtype_data->txfifo=%d", q->devtype_data->txfifo);
 	if (op->data.dir == SPI_MEM_DATA_OUT) {
 		if (op->data.nbytes > q->devtype_data->txfifo)
 			op->data.nbytes = q->devtype_data->txfifo;
 	} else {
+#if defined(AK)
 		if (op->data.nbytes > q->devtype_data->ahb_buf_size)
 			op->data.nbytes = q->devtype_data->ahb_buf_size;
 		else if (op->data.nbytes > (q->devtype_data->rxfifo - 4))
+		if (op->data.nbytes > (q->devtype_data->rxfifo - 4))
 			op->data.nbytes = ALIGN_DOWN(op->data.nbytes, 8);
+#else
+		if (op->data.nbytes > q->devtype_data->rxfifo)
+			op->data.nbytes = q->devtype_data->rxfifo;
+		else if (op->data.nbytes > (q->devtype_data->rxfifo - 4))
+		if (op->data.nbytes > (q->devtype_data->rxfifo - 4))
+	  		op->data.nbytes = ALIGN_DOWN(op->data.nbytes, 8);
+#endif
 	}
+	PR("bytes=%d", op->data.nbytes);
 
 	return 0;
 }
@@ -1058,6 +1078,8 @@ static const struct udevice_id fsl_qspi_ids[] = {
 	{ .compatible = "fsl,imx6sx-qspi" },
 	{ .compatible = "fsl,imx6ul-qspi" },
 	{ .compatible = "fsl,imx7d-qspi" },
+	{ .compatible = "fsl,ls1021a-qspi" },
+	{ .compatible = "fsl,ls2080a-qspi" },
 	{ }
 };
 
