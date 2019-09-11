@@ -41,22 +41,25 @@
 #define CONFIG_SYS_FMAN_FW_ADDR		0x400d0000
 #define CONFIG_FSL_SPI_INTERFACE
 #define CONFIG_SF_DATAFLASH
-
+#define CONFIG_SYS_FSL_QSPI_BASE        0x40000000
 
 
 /*
  * Environment
  */
 #define CONFIG_ENV_OVERWRITE
-
-#define CONFIG_ENV_SIZE			0x40000          /* 256KB */
-#ifdef CONFIG_TFABOOT
-#define CONFIG_ENV_OFFSET		0x500000        /* 5MB */
-#else
-#define CONFIG_ENV_OFFSET		0x300000        /* 3MB */
-#endif
+#define CONFIG_ENV_SIZE			0x2000          /* 8KB */
 #define CONFIG_ENV_SECT_SIZE		0x40000
+
+#if defined(CONFIG_TFABOOT)
+#define CONFIG_ENV_OFFSET		0x500000        /* 5MB */
+#elif defined(CONFIG_QSPI_BOOT) && !defined(CONFIG_TFABOOT)
+#define CONFIG_ENV_OFFSET               0x300000        /* 3MB */
+#define CONFIG_ENV_ADDR                 (CONFIG_SYS_FSL_QSPI_BASE + \
+                                                CONFIG_ENV_OFFSET)
 #endif
+#endif
+
 
 /* SATA */
 #define CONFIG_SCSI_AHCI_PLAT

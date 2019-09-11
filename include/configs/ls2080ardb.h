@@ -68,7 +68,7 @@ unsigned long get_board_sys_clk(void);
 #define CONFIG_SYS_SCSI_MAX_LUN			1
 #define CONFIG_SYS_SCSI_MAX_DEVICE		(CONFIG_SYS_SCSI_MAX_SCSI_ID * \
 						CONFIG_SYS_SCSI_MAX_LUN)
-#ifdef CONFIG_TFABOOT
+#if defined(CONFIG_TFABOOT)
 #define CONFIG_SYS_MMC_ENV_DEV         0
 
 #define CONFIG_ENV_SIZE			0x2000
@@ -76,6 +76,12 @@ unsigned long get_board_sys_clk(void);
 #define CONFIG_ENV_ADDR			(CONFIG_SYS_FLASH_BASE + \
 					 CONFIG_ENV_OFFSET)
 #define CONFIG_ENV_SECT_SIZE		0x40000
+#elif defined(CONFIG_QSPI_BOOT)
+#define CONFIG_ENV_SIZE			0x2000
+#define CONFIG_SYS_FSL_QSPI_BASE        0x20000000
+#define CONFIG_ENV_OFFSET               0x300000        /* 3MB */
+#define CONFIG_ENV_ADDR                 (CONFIG_SYS_FSL_QSPI_BASE + \
+                                                CONFIG_ENV_OFFSET)
 #endif
 
 #if !defined(CONFIG_FSL_QSPI) || defined(CONFIG_TFABOOT)
